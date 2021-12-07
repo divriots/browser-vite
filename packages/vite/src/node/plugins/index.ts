@@ -30,7 +30,12 @@ export async function resolvePlugins(
 
   return [
     isBuild ? null : preAliasPlugin(),
-    aliasPlugin({ entries: config.resolve.alias }),
+    aliasPlugin({
+      entries: config.resolve.alias,
+      customResolver: function (this, updatedId, importer) {
+        return this.resolve(updatedId, importer, { skipSelf: true })
+      }
+    }),
     ...prePlugins,
     config.build.polyfillModulePreload
       ? modulePreloadPolyfillPlugin(config)
