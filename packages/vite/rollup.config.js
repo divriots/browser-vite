@@ -224,7 +224,7 @@ const browserConfig = {
       preventAssignment: true,
       values: {
         'process.env.DEBUG': 'false',
-        'process.env.VITE_BROWSER': 'true',
+        'process.env.VITE_BROWSER': 'true'
       }
     }),
     alias({
@@ -471,13 +471,11 @@ function viteForBrowserPlugin() {
     chalk: `const p = new Proxy(s=>s, { get() {return p;}});export default p;`,
     debug: `export default function debug() {return () => {}}`,
     'fast-glob': 'export default { sync: () => [] }',
-    'builtin-modules': 'export default []',
-    url: 'const URL = globalThis.URL;const URLSearchParams = globalThis.URLSearchParams;function parse(s) {return new URL(s[0]==="/" ? "file://"+s : s)};function pathToFileURL(s) {throw new Error(s);};export { URL, parse, pathToFileURL, URLSearchParams }',
     'postcss-load-config':
       'export default () => {throw new Error("No PostCSS Config found")}',
     sirv: 'export default function () {}'
   }
-  
+
   return {
     name: 'vite:browser',
     resolveId: (id, importer) => {
@@ -514,7 +512,7 @@ function viteForBrowserPlugin() {
 export default (commandLineArgs) => {
   const isDev = commandLineArgs.watch
   const isProduction = !isDev
-  
+
   return [
     envConfig,
     clientConfig,
