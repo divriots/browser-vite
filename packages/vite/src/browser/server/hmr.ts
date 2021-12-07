@@ -12,7 +12,6 @@ export const debugHmr = createDebugger('vite:hmr')
 
 const normalizedClientDir = normalizePath(CLIENT_DIR)
 
-
 function getShortName(file: string, root: string) {
   return file.startsWith(root + '/') ? path.posix.relative(root, file) : file
 }
@@ -29,7 +28,9 @@ export async function handleHMRUpdate(
   const isConfigDependency = config.configFileDependencies.some(
     (name) => file === path.resolve(name)
   )
-  const isEnv = config.inlineConfig.envFile !== false && file.endsWith('.env')
+  const isEnv =
+    config.inlineConfig.envFile !== false &&
+    (file === '.env' || file.startsWith('.env.'))
   if (isConfig || isConfigDependency || isEnv) {
     // auto restart server
     debugHmr(`[config change] ${chalk.dim(shortFile)}`)
@@ -39,7 +40,7 @@ export async function handleHMRUpdate(
       ),
       { clear: true, timestamp: true }
     )
-    await restartServer(server)
+    await server.restart()
     return
   }
 
@@ -264,8 +265,4 @@ function invalidate(mod: ModuleNode, timestamp: number, seen: Set<ModuleNode>) {
       invalidate(importer, timestamp, seen)
     }
   })
-}
-
-async function restartServer(server: ViteDevServer) {
-  // TODO BROWSER SUPPORT
 }

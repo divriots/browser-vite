@@ -1,16 +1,23 @@
 import path from 'path'
-import type { Logger } from '../node/logger';
-import type { Plugin } from '../node/plugin';
-import { mergeAlias, mergeConfig, resolveBaseUrl, sortUserPlugins, InlineConfig, ResolvedConfig } from '../node/config';
-import { normalizePath } from '../node/utils';
-import { resolveBuildOptions } from '../node/build';
-import { CLIENT_ENTRY, DEFAULT_ASSETS_RE, ENV_ENTRY } from '../node/constants';
-import { resolvePlugins } from './plugins';
-import { resolveServerOptions } from './server';
-import { PluginContainer } from '../node';
-import aliasPlugin from '@rollup/plugin-alias';
-import { resolvePlugin } from './plugins/resolve';
-import { createPluginContainer } from '../node/server/pluginContainer';
+import type { Logger } from '../node/logger'
+import type { Plugin } from '../node/plugin'
+import {
+  mergeAlias,
+  mergeConfig,
+  resolveBaseUrl,
+  sortUserPlugins,
+  InlineConfig,
+  ResolvedConfig
+} from '../node/config'
+import { normalizePath } from '../node/utils'
+import { resolveBuildOptions } from '../node/build'
+import { CLIENT_ENTRY, DEFAULT_ASSETS_RE, ENV_ENTRY } from '../node/constants'
+import { resolvePlugins } from './plugins'
+import { resolveServerOptions } from './server'
+import { PluginContainer } from '../node'
+import aliasPlugin from '@rollup/plugin-alias'
+import { resolvePlugin } from './plugins/resolve'
+import { createPluginContainer } from '../node/server/pluginContainer'
 
 export async function resolveConfig(
   inlineConfig: InlineConfig,
@@ -18,8 +25,8 @@ export async function resolveConfig(
   defaultMode = 'development'
 ): Promise<ResolvedConfig> {
   let config = inlineConfig
-  const mode = defaultMode;
-  const isProduction = false;
+  const mode = defaultMode
+  const isProduction = false
 
   const configEnv = {
     mode,
@@ -36,15 +43,21 @@ export async function resolveConfig(
     },
     hasErrorLogged: () => false,
     hasWarned: false,
-    warnOnce: (s) => console.warn(s),
+    warnOnce: (s) => console.warn(s)
   }
 
   // resolve plugins
-  const rawUserPlugins = [].concat
-    .apply(config.plugins || [])
-    .filter((p: Plugin) => {
-      return p && (!p.apply || p.apply === command);
-    }) as Plugin[]
+  const rawUserPlugins = (config.plugins || []).flat().filter((p) => {
+    if (!p) {
+      return false
+    } else if (!p.apply) {
+      return true
+    } else if (typeof p.apply === 'function') {
+      return p.apply({ ...config, mode }, configEnv)
+    } else {
+      return p.apply === command
+    }
+  }) as Plugin[]
   const [prePlugins, normalPlugins, postPlugins] =
     sortUserPlugins(rawUserPlugins)
 
@@ -85,7 +98,7 @@ export async function resolveConfig(
 
   // resolve public base url
   const BASE_URL = resolveBaseUrl(config.base, command === 'build', logger)
-  const resolvedBuildOptions = resolveBuildOptions(config.build)
+  const resolvedBuildOptions = resolveBuildOptions(resolvedRoot, config.build)
 
   const cacheDir = config.cacheDir
 
@@ -124,7 +137,7 @@ export async function resolveConfig(
             ]
           }))
       }
-      return (await container.resolveId(id, importer, undefined, ssr))?.id
+      return (await container.resolveId(id, importer, { ssr }))?.id
     }
   }
 
@@ -136,6 +149,8 @@ export async function resolveConfig(
           typeof publicDir === 'string' ? publicDir : 'public'
         )
       : ''
+
+  const server = resolveServerOptions(resolvedRoot, config.server)
 
   const resolved: ResolvedConfig = {
     ...config,
@@ -151,8 +166,9 @@ export async function resolveConfig(
     mode,
     isProduction,
     plugins: userPlugins,
-    server: resolveServerOptions(resolvedRoot, config.server),
+    server,
     build: resolvedBuildOptions,
+    preview: undefined as any,
     env: {
       BASE_URL,
       MODE: mode,
@@ -160,14 +176,16 @@ export async function resolveConfig(
       PROD: isProduction
     },
     assetsInclude(file: string) {
-      return DEFAULT_ASSETS_RE.test(file);
+      return DEFAULT_ASSETS_RE.test(file)
     },
     logger,
+    packageCache: new Map(),
     createResolver,
     optimizeDeps: {
       ...config.optimizeDeps,
       esbuildOptions: {
         keepNames: config.optimizeDeps?.keepNames,
+        preserveSymlinks: config.resolve?.preserveSymlinks,
         ...config.optimizeDeps?.esbuildOptions
       }
     }

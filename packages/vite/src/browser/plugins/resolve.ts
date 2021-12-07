@@ -1,20 +1,20 @@
 import path from 'path'
 import type { Plugin } from '../../node/plugin'
 import chalk from 'chalk'
-import {
-  FS_PREFIX,
-  DEFAULT_EXTENSIONS,
-} from '../../node/constants'
+import { FS_PREFIX, DEFAULT_EXTENSIONS } from '../../node/constants'
 import {
   createDebugger,
   isExternalUrl,
   fsPathFromId,
   isDataUrl,
+  isTsRequest,
+  isPossibleTsOutput,
+  getTsSrcPath
 } from '../../node/utils'
 import type { ViteDevServer, InternalResolveOptions } from '../../node'
 import type { PartialResolvedId } from 'rollup'
 import { resolve as _resolveExports } from 'resolve.exports'
-import fs from 'fs';
+import fs from 'fs'
 
 const isDebug = process.env.DEBUG
 const debug = createDebugger('vite:resolve-details', {
@@ -24,25 +24,33 @@ const debug = createDebugger('vite:resolve-details', {
 export function resolvePlugin(baseOptions: InternalResolveOptions): Plugin {
   const {
     root,
+    // isProduction,
     asSrc,
+    // ssrConfig,
     preferRelative = false
   } = baseOptions
-  const requireOptions: InternalResolveOptions = {
-    ...baseOptions,
-    isRequire: true
-  }
+  let server: ViteDevServer | undefined
+
   return {
     name: 'vite:browser:resolve',
 
-    resolveId(id, importer, resolveOpts, ssr) {
-      // this is passed by @rollup/plugin-commonjs
-      const isRequire =
-        resolveOpts &&
-        resolveOpts.custom &&
-        resolveOpts.custom['node-resolve'] &&
-        resolveOpts.custom['node-resolve'].isRequire
+    configureServer(_server) {
+      server = _server
+    },
 
-      const options = isRequire ? requireOptions : baseOptions
+    resolveId(id, importer, resolveOpts) {
+      const ssr = resolveOpts?.ssr === true
+
+      // this is passed by @rollup/plugin-commonjs
+      const isRequire: boolean =
+        resolveOpts?.custom?.['node-resolve']?.isRequire ?? false
+
+      const options: InternalResolveOptions = {
+        isRequire,
+
+        ...baseOptions,
+        isFromTsImporter: isTsRequest(importer ?? '')
+      }
 
       let res: string | PartialResolvedId | undefined
 
@@ -73,7 +81,7 @@ export function resolvePlugin(baseOptions: InternalResolveOptions): Plugin {
         // handle browser field mapping for relative imports
 
         if ((res = tryFsResolve(fsPath, options))) {
-          return res;
+          return res
         }
       }
 
@@ -121,6 +129,23 @@ function tryFsResolve(
   }
 
   let res: string | undefined
+
+  // if we fould postfix exist, we should first try resolving file with postfix. details see #4703.
+  if (
+    postfix &&
+    (res = tryResolveFile(
+      fsPath,
+      '',
+      options,
+      false,
+      targetWeb,
+      options.tryPrefix,
+      options.skipPackageJson
+    ))
+  ) {
+    return res
+  }
+
   if (
     (res = tryResolveFile(
       file,
@@ -137,6 +162,21 @@ function tryFsResolve(
 
   for (const ext of options.extensions || DEFAULT_EXTENSIONS) {
     if (
+      postfix &&
+      (res = tryResolveFile(
+        fsPath + ext,
+        '',
+        options,
+        false,
+        targetWeb,
+        options.tryPrefix,
+        options.skipPackageJson
+      ))
+    ) {
+      return res
+    }
+
+    if (
       (res = tryResolveFile(
         file + ext,
         postfix,
@@ -149,6 +189,21 @@ function tryFsResolve(
     ) {
       return res
     }
+  }
+
+  if (
+    postfix &&
+    (res = tryResolveFile(
+      fsPath,
+      '',
+      options,
+      tryIndex,
+      targetWeb,
+      options.tryPrefix,
+      options.skipPackageJson
+    ))
+  ) {
+    return res
   }
 
   if (
@@ -175,13 +230,28 @@ function tryResolveFile(
   tryPrefix?: string,
   skipPackageJson?: boolean
 ): string | undefined {
-  if (!file.startsWith(options.root)) return undefined;
+  if (!file.startsWith(options.root)) return undefined
   if (fs.existsSync(file)) {
     return file + postfix
   } else if (tryIndex) {
     const index = tryFsResolve(file + '/index', options, false)
     if (index) return index + postfix
   }
+
+  const tryTsExtension = options.isFromTsImporter && isPossibleTsOutput(file)
+  if (tryTsExtension) {
+    const tsSrcPath = getTsSrcPath(file)
+    return tryResolveFile(
+      tsSrcPath,
+      postfix,
+      options,
+      tryIndex,
+      targetWeb,
+      tryPrefix,
+      skipPackageJson
+    )
+  }
+
   if (tryPrefix) {
     const prefixed = `${path.dirname(file)}/${tryPrefix}${path.basename(file)}`
     return tryResolveFile(prefixed, postfix, options, tryIndex, targetWeb)
@@ -199,12 +269,10 @@ export function tryOptimizedResolve(
   if (!cacheDir || !depData) return
 
   const getOptimizedUrl = (optimizedData: typeof depData.optimized[string]) => {
-    return (
-      optimizedData.file //+
-      // `?v=${depData.browserHash}${
-      //   optimizedData.needsInterop ? `&es-interop` : ``
-      // }`
-    )
+    return optimizedData.file //+
+    // `?v=${depData.browserHash}${
+    //   optimizedData.needsInterop ? `&es-interop` : ``
+    // }`
   }
 
   // check if id has been optimized

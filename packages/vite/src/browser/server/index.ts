@@ -1,4 +1,4 @@
-import type { ResolvedServerOptions, ServerOptions } from '../../node/server';
+import type { ResolvedServerOptions, ServerOptions } from '../../node/server'
 
 export function resolveServerOptions(
   root: string,
@@ -6,16 +6,16 @@ export function resolveServerOptions(
 ): ResolvedServerOptions {
   const server = raw || {}
   let allowDirs = server.fs?.allow
+  const deny = server.fs?.deny || ['.env', '.env.*', '*.{crt,pem}']
 
   if (!allowDirs) {
     allowDirs = [root]
   }
 
-
   server.fs = {
-    // TODO: make strict by default
-    strict: server.fs?.strict,
-    allow: allowDirs
+    strict: server.fs?.strict ?? true,
+    allow: allowDirs,
+    deny
   }
   return server as ResolvedServerOptions
 }

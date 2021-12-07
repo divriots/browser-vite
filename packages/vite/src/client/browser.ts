@@ -8,9 +8,10 @@ import {
 } from 'types/hmrPayload'
 import { CustomEventName } from 'types/customEvent'
 import { ErrorOverlay, overlayId } from './overlay'
-import './env'
+// eslint-disable-next-line node/no-missing-import
+import '@vite/env'
+
 // injected by the hmr plugin when served
-declare const __ROOT__: string
 declare const __BASE__: string
 declare const __HMR_PROTOCOL__: string
 declare const __HMR_HOSTNAME__: string
@@ -67,13 +68,11 @@ export async function handleMessage(payload: HMRPayload) {
           // can't use querySelector with `[href*=]` here since the link may be
           // using relative paths so we need to use link.href to grab the full
           // URL for the include check.
-          const el = (
-            [].slice.call(
-              document.querySelectorAll(`link`)
-            ) as HTMLLinkElement[]
+          const el = Array.from(
+            document.querySelectorAll<HTMLLinkElement>('link')
           ).find((e) => e.href.includes(path))
           if (el) {
-            const newPath = `${path}${
+            const newPath = `${base}${path.slice(1)}${
               path.includes('?') ? '&' : '?'
             }t=${timestamp}`
             el.href = new URL(newPath, el.href).href
@@ -244,8 +243,6 @@ export function removeStyle(id: string): void {
   const style = sheetsMap.get(id)
   if (style) {
     if (style instanceof CSSStyleSheet) {
-      // @ts-ignore
-      const index = document.adoptedStyleSheets.indexOf(style)
       // @ts-ignore
       document.adoptedStyleSheets = document.adoptedStyleSheets.filter(
         (s: CSSStyleSheet) => s !== style
