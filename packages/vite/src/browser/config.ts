@@ -107,6 +107,13 @@ export async function resolveConfig(
   const createResolver: ResolvedConfig['createResolver'] = (options) => {
     let aliasContainer: PluginContainer | undefined
     let resolverContainer: PluginContainer | undefined
+    const createAliasPlugin = () =>
+      aliasPlugin({
+        entries: resolved.resolve.alias,
+        customResolver: function (this, updatedId, importer) {
+          return this.resolve(updatedId, importer, { skipSelf: true })
+        }
+      })
     return async (id, importer, aliasOnly, ssr) => {
       let container: PluginContainer
       if (aliasOnly) {
@@ -114,7 +121,7 @@ export async function resolveConfig(
           aliasContainer ||
           (aliasContainer = await createPluginContainer({
             ...resolved,
-            plugins: [aliasPlugin({ entries: resolved.resolve.alias })]
+            plugins: [createAliasPlugin()]
           }))
       } else {
         container =
@@ -122,7 +129,7 @@ export async function resolveConfig(
           (resolverContainer = await createPluginContainer({
             ...resolved,
             plugins: [
-              aliasPlugin({ entries: resolved.resolve.alias }),
+              createAliasPlugin(),
               resolvePlugin({
                 ...resolved.resolve,
                 root: resolvedRoot,
