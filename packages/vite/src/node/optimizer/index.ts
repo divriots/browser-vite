@@ -14,14 +14,15 @@ import {
   normalizeId
 } from '../utils'
 import { esbuildDepPlugin } from './esbuildDepPlugin'
-import { ImportSpecifier, init, parse } from 'es-module-lexer'
 import { init as cjs_init, parse as cjs_parse } from 'cjs-module-lexer'
+import { init, parse } from 'es-module-lexer'
 import { scanImports } from './scan'
 import { transformWithEsbuild } from '../plugins/esbuild'
+import { performance } from 'perf_hooks'
 
 const debug = createDebugger('vite:deps')
 
-export type ExportsData = [ImportSpecifier[], string[]] & {
+export type ExportsData = ReturnType<typeof parse> & {
   // es-module-lexer has a facade detection but isn't always accurate for our
   // use case when the module has default export
   hasReExports?: true
@@ -167,7 +168,7 @@ export async function optimizeDeps(
   data.browserHash = createHash('sha256')
     .update(data.hash + JSON.stringify(deps))
     .digest('hex')
-    .substr(0, 8)
+    .substring(0, 8)
 
   const missingIds = Object.keys(missing)
   if (missingIds.length) {
@@ -350,13 +351,14 @@ export async function optimizeDeps(
     define[key] = typeof value === 'string' ? value : JSON.stringify(value)
   }
 
-  const start = Date.now()
+  const start = performance.now()
 
   const result = await build({
     absWorkingDir: process.cwd(),
     entryPoints: Object.keys(flatIdDeps),
     bundle: true,
     format: 'esm',
+    target: config.build.target || undefined,
     external: config.optimizeDeps?.exclude,
     logLevel: 'error',
     splitting: true,
@@ -394,7 +396,7 @@ export async function optimizeDeps(
 
   writeFile(dataPath, JSON.stringify(data, null, 2))
 
-  debug(`deps bundled in ${Date.now() - start}ms`)
+  debug(`deps bundled in ${(performance.now() - start).toFixed(2)}ms`)
   return data
 }
 
@@ -442,7 +444,7 @@ function needsInterop(
   return false
 }
 
-function isSingleDefaultExport(exports: string[]) {
+function isSingleDefaultExport(exports: readonly string[]) {
   return exports.length === 1 && exports[0] === 'default'
 }
 
@@ -471,5 +473,5 @@ function getDepHash(root: string, config: ResolvedConfig): string {
       return value
     }
   )
-  return createHash('sha256').update(content).digest('hex').substr(0, 8)
+  return createHash('sha256').update(content).digest('hex').substring(0, 8)
 }

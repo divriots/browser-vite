@@ -1,0 +1,23 @@
+{
+  "name": "test-ssr-deps",
+  "private": true,
+  "version": "0.0.0",
+  "scripts": {
+    "dev": "node server",
+    "serve": "cross-env NODE_ENV=production node server",
+    "debug": "node --inspect-brk server",
+    "postinstall": "node ../../../scripts/patchFileDeps.cjs"
+  },
+  "dependencies": {
+    "node-addon": "link:./node-addon",
+    "primitive-export": "link:./primitive-export",
+    "read-file-content": "file:./read-file-content",
+    "ts-transpiled-exports": "link:./ts-transpiled-exports",
+    "object-assigned-exports": "link:./object-assigned-exports",
+    "forwarded-export": "link:./forwarded-export"
+  },
+  "devDependencies": {
+    "cross-env": "^7.0.3",
+    "express": "^4.17.1"
+  }
+}

@@ -7,6 +7,11 @@ import {
   resolveServerOptions,
   ServerOptions
 } from './server'
+import {
+  ResolvedPreviewOptions,
+  resolvePreviewOptions,
+  PreviewOptions
+} from './preview'
 import { CSSOptions } from './plugins/css'
 import {
   arraify,
@@ -14,7 +19,8 @@ import {
   isExternalUrl,
   isObject,
   lookupFile,
-  normalizePath
+  normalizePath,
+  dynamicImport
 } from './utils'
 import { resolvePlugins } from './plugins'
 import chalk from 'chalk'
@@ -40,6 +46,8 @@ import {
 } from './server/pluginContainer'
 import aliasPlugin from '@rollup/plugin-alias'
 import { build } from 'esbuild'
+import { performance } from 'perf_hooks'
+import { PackageCache } from './packages'
 
 const debug = createDebugger('vite:config')
 
@@ -127,7 +135,7 @@ export interface UserConfig {
    */
   esbuild?: ESBuildOptions | false
   /**
-   * Specify additional files to be treated as static assets.
+   * Specify additional picomatch patterns to be treated as static assets.
    */
   assetsInclude?: string | RegExp | (string | RegExp)[]
   /**
@@ -138,6 +146,10 @@ export interface UserConfig {
    * Build specific options
    */
   build?: BuildOptions
+  /**
+   * Preview specific options, e.g. host, port, https...
+   */
+  preview?: PreviewOptions
   /**
    * Dep optimization options
    */
@@ -223,10 +235,13 @@ export type ResolvedConfig = Readonly<
     plugins: readonly Plugin[]
     server: ResolvedServerOptions
     build: ResolvedBuildOptions
+    preview: ResolvedPreviewOptions
     assetsInclude: (file: string) => boolean
     logger: Logger
     createResolver: (options?: Partial<InternalResolveOptions>) => ResolveFn
     optimizeDeps: Omit<DepOptimizationOptions, 'keepNames'>
+    /** @internal */
+    packageCache: PackageCache
   }
 >
 
@@ -279,13 +294,21 @@ export async function resolveConfig(
     customLogger: config.customLogger
   })
 
-  // user config may provide an alternative mode. But --mode has a higher prority
+  // user config may provide an alternative mode. But --mode has a higher priority
   mode = inlineConfig.mode || config.mode || mode
   configEnv.mode = mode
 
   // resolve plugins
   const rawUserPlugins = (config.plugins || []).flat().filter((p) => {
-    return p && (!p.apply || p.apply === command)
+    if (!p) {
+      return false
+    } else if (!p.apply) {
+      return true
+    } else if (typeof p.apply === 'function') {
+      return p.apply({ ...config, mode }, configEnv)
+    } else {
+      return p.apply === command
+    }
   }) as Plugin[]
   const [prePlugins, normalPlugins, postPlugins] =
     sortUserPlugins(rawUserPlugins)
@@ -344,7 +367,7 @@ export async function resolveConfig(
 
   // resolve public base url
   const BASE_URL = resolveBaseUrl(config.base, command === 'build', logger)
-  const resolvedBuildOptions = resolveBuildOptions(config.build)
+  const resolvedBuildOptions = resolveBuildOptions(resolvedRoot, config.build)
 
   // resolve cache directory
   const pkgPath = lookupFile(
@@ -395,7 +418,7 @@ export async function resolveConfig(
             ]
           }))
       }
-      return (await container.resolveId(id, importer, undefined, ssr))?.id
+      return (await container.resolveId(id, importer, { ssr }))?.id
     }
   }
 
@@ -407,6 +430,8 @@ export async function resolveConfig(
           typeof publicDir === 'string' ? publicDir : 'public'
         )
       : ''
+
+  const server = resolveServerOptions(resolvedRoot, config.server)
 
   const resolved: ResolvedConfig = {
     ...config,
@@ -422,8 +447,9 @@ export async function resolveConfig(
     mode,
     isProduction,
     plugins: userPlugins,
-    server: resolveServerOptions(resolvedRoot, config.server),
+    server,
     build: resolvedBuildOptions,
+    preview: resolvePreviewOptions(config.preview, server),
     env: {
       ...userEnv,
       BASE_URL,
@@ -435,11 +461,13 @@ export async function resolveConfig(
       return DEFAULT_ASSETS_RE.test(file) || assetsFilter(file)
     },
     logger,
+    packageCache: new Map(),
     createResolver,
     optimizeDeps: {
       ...config.optimizeDeps,
       esbuildOptions: {
         keepNames: config.optimizeDeps?.keepNames,
+        preserveSymlinks: config.resolve?.preserveSymlinks,
         ...config.optimizeDeps?.esbuildOptions
       }
     }
@@ -568,6 +596,16 @@ export async function resolveConfig(
     logDeprecationWarning(
       'build.cleanCssOptions',
       'Vite now uses esbuild for CSS minification.'
+    )
+  }
+
+  if (config.build?.terserOptions && config.build.minify === 'esbuild') {
+    logger.warn(
+      chalk.yellow(
+        `build.terserOptions is specified but build.minify is not set to use Terser. ` +
+          `Note Vite now defaults to use esbuild for minification. If you still ` +
+          `prefer Terser, set build.minify to "terser".`
+      )
     )
   }
 
@@ -735,18 +773,19 @@ export async function loadConfigFromFile(
   config: UserConfig
   dependencies: string[]
 } | null> {
-  const start = Date.now()
+  const start = performance.now()
+  const getTime = () => `${(performance.now() - start).toFixed(2)}ms`
 
   let resolvedPath: string | undefined
   let isTS = false
-  let isMjs = false
+  let isESM = false
   let dependencies: string[] = []
 
   // check package.json for type: "module" and set `isMjs` to true
   try {
     const pkg = lookupFile(configRoot, ['package.json'])
     if (pkg && JSON.parse(pkg).type === 'module') {
-      isMjs = true
+      isESM = true
     }
   } catch (e) {}
 
@@ -754,6 +793,10 @@ export async function loadConfigFromFile(
     // explicit config path is always resolved from cwd
     resolvedPath = path.resolve(configFile)
     isTS = configFile.endsWith('.ts')
+
+    if (configFile.endsWith('.mjs')) {
+      isESM = true
+    }
   } else {
     // implicit config file loaded from inline root (if present)
     // otherwise from cwd
@@ -766,7 +809,7 @@ export async function loadConfigFromFile(
       const mjsconfigFile = path.resolve(configRoot, 'vite.config.mjs')
       if (fs.existsSync(mjsconfigFile)) {
         resolvedPath = mjsconfigFile
-        isMjs = true
+        isESM = true
       }
     }
 
@@ -787,66 +830,35 @@ export async function loadConfigFromFile(
   try {
     let userConfig: UserConfigExport | undefined
 
-    if (isMjs) {
+    if (isESM) {
       const fileUrl = require('url').pathToFileURL(resolvedPath)
+      const bundled = await bundleConfigFile(resolvedPath, true)
+      dependencies = bundled.dependencies
       if (isTS) {
         // before we can register loaders without requiring users to run node
         // with --experimental-loader themselves, we have to do a hack here:
         // bundle the config file w/ ts transforms first, write it to disk,
         // load it with native Node ESM, then delete the file.
-        const bundled = await bundleConfigFile(resolvedPath, true)
-        dependencies = bundled.dependencies
         fs.writeFileSync(resolvedPath + '.js', bundled.code)
-        userConfig = (await eval(`import(fileUrl + '.js?t=${Date.now()}')`))
+        userConfig = (await dynamicImport(`${fileUrl}.js?t=${Date.now()}`))
           .default
         fs.unlinkSync(resolvedPath + '.js')
-        debug(
-          `TS + native esm config loaded in ${Date.now() - start}ms`,
-          fileUrl
-        )
+        debug(`TS + native esm config loaded in ${getTime()}`, fileUrl)
       } else {
-        // using eval to avoid this from being compiled away by TS/Rollup
+        // using Function to avoid this from being compiled away by TS/Rollup
         // append a query so that we force reload fresh config in case of
         // server restart
-        userConfig = (await eval(`import(fileUrl + '?t=${Date.now()}')`))
-          .default
-        debug(`native esm config loaded in ${Date.now() - start}ms`, fileUrl)
-      }
-    }
-
-    if (!userConfig && !isTS && !isMjs) {
-      // 1. try to directly require the module (assuming commonjs)
-      try {
-        // clear cache in case of server restart
-        delete require.cache[require.resolve(resolvedPath)]
-        userConfig = require(resolvedPath)
-        debug(`cjs config loaded in ${Date.now() - start}ms`)
-      } catch (e) {
-        const ignored = new RegExp(
-          [
-            `Cannot use import statement`,
-            `Must use import to load ES Module`,
-            // #1635, #2050 some Node 12.x versions don't have esm detection
-            // so it throws normal syntax errors when encountering esm syntax
-            `Unexpected token`,
-            `Unexpected identifier`
-          ].join('|')
-        )
-        if (!ignored.test(e.message)) {
-          throw e
-        }
+        userConfig = (await dynamicImport(`${fileUrl}?t=${Date.now()}`)).default
+        debug(`native esm config loaded in ${getTime()}`, fileUrl)
       }
     }
 
     if (!userConfig) {
-      // 2. if we reach here, the file is ts or using es import syntax, or
-      // the user has type: "module" in their package.json (#917)
-      // transpile es import syntax to require syntax using rollup.
-      // lazy require rollup (it's actually in dependencies)
+      // Bundle config file and transpile it to cjs using esbuild.
       const bundled = await bundleConfigFile(resolvedPath)
       dependencies = bundled.dependencies
       userConfig = await loadConfigFromBundledFile(resolvedPath, bundled.code)
-      debug(`bundled config file loaded in ${Date.now() - start}ms`)
+      debug(`bundled config file loaded in ${getTime()}`)
     }
 
     const config = await (typeof userConfig === 'function'
@@ -871,7 +883,7 @@ export async function loadConfigFromFile(
 
 async function bundleConfigFile(
   fileName: string,
-  mjs = false
+  isESM = false
 ): Promise<{ code: string; dependencies: string[] }> {
   const result = await build({
     absWorkingDir: process.cwd(),
@@ -880,7 +892,7 @@ async function bundleConfigFile(
     write: false,
     platform: 'node',
     bundle: true,
-    format: mjs ? 'esm' : 'cjs',
+    format: isESM ? 'esm' : 'cjs',
     sourcemap: 'inline',
     metafile: true,
     plugins: [

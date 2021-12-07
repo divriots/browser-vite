@@ -4,7 +4,9 @@ import MagicString from 'magic-string'
 import { AttributeNode, NodeTypes } from '@vue/compiler-dom'
 import { Connect } from 'types/connect'
 import {
+  addToHTMLProxyCache,
   applyHtmlTransforms,
+  assetAttrsConfig,
   getScriptInfo,
   IndexHtmlTransformHook,
   resolveHtmlTransforms,
@@ -13,8 +15,8 @@ import {
 import { ResolvedConfig, ViteDevServer } from '../..'
 import { send } from '../send'
 import { CLIENT_PUBLIC_PATH, FS_PREFIX } from '../../constants'
-import { cleanUrl, fsPathFromId } from '../../utils'
-import { assetAttrsConfig } from '../../plugins/html'
+import { cleanUrl, fsPathFromId, normalizePath, injectQuery } from '../../utils'
+import type { ModuleGraph } from '../moduleGraph'
 
 export function createDevHtmlTransformFn(
   server: ViteDevServer
@@ -33,9 +35,9 @@ export function createDevHtmlTransformFn(
 
 function getHtmlFilename(url: string, server: ViteDevServer) {
   if (url.startsWith(FS_PREFIX)) {
-    return fsPathFromId(url)
+    return decodeURIComponent(fsPathFromId(url))
   } else {
-    return path.join(server.config.root, url.slice(1))
+    return decodeURIComponent(path.join(server.config.root, url.slice(1)))
   }
 }
 
@@ -45,9 +47,17 @@ const processNodeUrl = (
   s: MagicString,
   config: ResolvedConfig,
   htmlPath: string,
-  originalUrl?: string
+  originalUrl?: string,
+  moduleGraph?: ModuleGraph
 ) => {
-  const url = node.value?.content || ''
+  let url = node.value?.content || ''
+
+  if (moduleGraph) {
+    const mod = moduleGraph.urlToModuleMap.get(url)
+    if (mod && mod.lastHMRTimestamp > 0) {
+      url = injectQuery(url, `t=${mod.lastHMRTimestamp}`)
+    }
+  }
   if (startsWithSingleSlashRE.test(url)) {
     // prefix with base
     s.overwrite(
@@ -79,14 +89,12 @@ const devHtmlHook: IndexHtmlTransformHook = async (
   html,
   { path: htmlPath, server, originalUrl }
 ) => {
-  // TODO: solve this design issue
-  // Optional chain expressions can return undefined by design
-  // eslint-disable-next-line @typescript-eslint/no-non-null-asserted-optional-chain
-  const config = server?.config!
+  const { config, moduleGraph } = server!
   const base = config.base || '/'
 
   const s = new MagicString(html)
   let scriptModuleIndex = -1
+  const filePath = cleanUrl(htmlPath)
 
   await traverseHtml(html, htmlPath, (node) => {
     if (node.type !== NodeTypes.ELEMENT) {
@@ -101,15 +109,32 @@ const devHtmlHook: IndexHtmlTransformHook = async (
       }
 
       if (src) {
-        processNodeUrl(src, s, config, htmlPath, originalUrl)
+        processNodeUrl(src, s, config, htmlPath, originalUrl, moduleGraph)
       } else if (isModule) {
+        const url = filePath.replace(normalizePath(config.root), '')
+
+        const contents = node.children
+          .map((child: any) => child.content || '')
+          .join('')
+
+        // add HTML Proxy to Map
+        addToHTMLProxyCache(config, url, scriptModuleIndex, contents)
+
         // inline js module. convert to src="proxy"
+        const modulePath = `${
+          config.base + htmlPath.slice(1)
+        }?html-proxy&index=${scriptModuleIndex}.js`
+
+        // invalidate the module so the newly cached contents will be served
+        const module = server?.moduleGraph.getModuleById(modulePath)
+        if (module) {
+          server?.moduleGraph.invalidateModule(module)
+        }
+
         s.overwrite(
           node.loc.start.offset,
           node.loc.end.offset,
-          `<script type="module" src="${
-            config.base + htmlPath.slice(1)
-          }?html-proxy&index=${scriptModuleIndex}.js"></script>`
+          `<script type="module" src="${modulePath}"></script>`
         )
       }
     }
@@ -151,6 +176,10 @@ export function indexHtmlMiddleware(
 ): Connect.NextHandleFunction {
   // Keep the named function. The name is visible in debug logs via `DEBUG=connect:dispatcher ...`
   return async function viteIndexHtmlMiddleware(req, res, next) {
+    if (res.writableEnded) {
+      return next()
+    }
+
     const url = req.url && cleanUrl(req.url)
     // spa-fallback always redirects to /index.html
     if (url?.endsWith('.html') && req.headers['sec-fetch-dest'] !== 'script') {

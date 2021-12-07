@@ -12,13 +12,14 @@ import {
   ENV_PUBLIC_PATH
 } from './constants'
 import resolve from 'resolve'
-import builtins from 'builtin-modules'
+import { builtinModules } from 'module'
 import { FSWatcher } from 'chokidar'
 import remapping from '@ampproject/remapping'
 import {
   DecodedSourceMap,
   RawSourceMap
 } from '@ampproject/remapping/dist/types/types'
+import { performance } from 'perf_hooks'
 
 export function slash(p: string): string {
   return p.replace(/\\/g, '/')
@@ -36,8 +37,33 @@ export const flattenId = (id: string): string =>
 export const normalizeId = (id: string): string =>
   id.replace(/(\s*>\s*)/g, ' > ')
 
+//TODO: revisit later to see if the edge case that "compiling using node v12 code to be run in node v16 in the server" is what we intend to support.
+const builtins = new Set([
+  ...builtinModules,
+  'assert/strict',
+  'diagnostics_channel',
+  'dns/promises',
+  'fs/promises',
+  'path/posix',
+  'path/win32',
+  'readline/promises',
+  'stream/consumers',
+  'stream/promises',
+  'stream/web',
+  'timers/promises',
+  'util/types',
+  'wasi'
+])
+
 export function isBuiltin(id: string): boolean {
-  return builtins.includes(id)
+  return builtins.has(id.replace(/^node:/, ''))
+}
+
+export function moduleListContains(
+  moduleList: string[] | undefined,
+  id: string
+): boolean | undefined {
+  return moduleList?.some((m) => m === id || id.startsWith(m + '/'))
 }
 
 export const bareImportRE = /^[\w@](?!.*:\/\/)/
@@ -50,12 +76,17 @@ try {
 
 const ssrExtensions = ['.js', '.cjs', '.json', '.node']
 
-export function resolveFrom(id: string, basedir: string, ssr = false): string {
+export function resolveFrom(
+  id: string,
+  basedir: string,
+  preserveSymlinks = false,
+  ssr = false
+): string {
   return resolve.sync(id, {
     basedir,
     extensions: ssr ? ssrExtensions : DEFAULT_EXTENSIONS,
     // necessary to work with pnpm
-    preserveSymlinks: isRunningWithYarnPnp || false
+    preserveSymlinks: preserveSymlinks || isRunningWithYarnPnp || false
   })
 }
 
@@ -63,11 +94,15 @@ export function resolveFrom(id: string, basedir: string, ssr = false): string {
  * like `resolveFrom` but supports resolving `>` path in `id`,
  * for example: `foo > bar > baz`
  */
-export function nestedResolveFrom(id: string, basedir: string): string {
+export function nestedResolveFrom(
+  id: string,
+  basedir: string,
+  preserveSymlinks = false
+): string {
   const pkgs = id.split('>').map((pkg) => pkg.trim())
   try {
     for (const pkg of pkgs) {
-      basedir = resolveFrom(pkg, basedir)
+      basedir = resolveFrom(pkg, basedir, preserveSymlinks)
     }
   } catch {}
   return basedir
@@ -133,7 +168,10 @@ export const isExternalUrl = (url: string): boolean => externalRE.test(url)
 export const dataUrlRE = /^\s*data:/i
 export const isDataUrl = (url: string): boolean => dataUrlRE.test(url)
 
-const knownJsSrcRE = /\.((j|t)sx?|mjs|vue|marko|svelte)($|\?)/
+export const virtualModuleRE = /^virtual-module:.*/
+export const virtualModulePrefix = 'virtual-module:'
+
+const knownJsSrcRE = /\.((j|t)sx?|mjs|vue|marko|svelte|astro)($|\?)/
 export const isJSRequest = (url: string): boolean => {
   url = cleanUrl(url)
   if (knownJsSrcRE.test(url)) {
@@ -144,6 +182,14 @@ export const isJSRequest = (url: string): boolean => {
   }
   return false
 }
+
+const knownTsRE = /\.(ts|mts|cts|tsx)$/
+const knownTsOutputRE = /\.(js|mjs|cjs|jsx)$/
+export const isTsRequest = (url: string) => knownTsRE.test(cleanUrl(url))
+export const isPossibleTsOutput = (url: string) =>
+  knownTsOutputRE.test(cleanUrl(url))
+export const getTsSrcPath = (filename: string) =>
+  filename.replace(/\.([cm])?(js)(x?)(\?|$)/, '.$1ts$3')
 
 const importQueryRE = /(\?|&)import=?(?:&|$)/
 const internalPrefixes = [
@@ -203,8 +249,8 @@ export async function asyncReplace(
 }
 
 export function timeFrom(start: number, subtract = 0): string {
-  const time: number | string = Date.now() - start - subtract
-  const timeString = (time + `ms`).padEnd(5, ' ')
+  const time: number | string = performance.now() - start - subtract
+  const timeString = (time.toFixed(2) + `ms`).padEnd(5, ' ')
   if (time < 10) {
     return chalk.green(timeString)
   } else if (time < 50) {
@@ -292,7 +338,9 @@ export function numberToPos(
 ): { line: number; column: number } {
   if (typeof offset !== 'number') return offset
   if (offset > source.length) {
-    throw new Error('offset is longer than source length!')
+    throw new Error(
+      `offset is longer than source length! offset ${offset} > length ${source.length}`
+    )
   }
   const lines = source.split(splitRE)
   let counted = 0
@@ -362,6 +410,21 @@ export function writeFile(
     fs.mkdirSync(dir, { recursive: true })
   }
   fs.writeFileSync(filename, content)
+}
+
+/**
+ * Use instead of fs.existsSync(filename)
+ * #2051 if we don't have read permission on a directory, existsSync() still
+ * works and will result in massively slow subsequent checks (which are
+ * unnecessary in the first place)
+ */
+export function isFileReadable(filename: string): boolean {
+  try {
+    fs.accessSync(filename, fs.constants.R_OK)
+    return true
+  } catch {
+    return false
+  }
 }
 
 /**
@@ -452,13 +515,11 @@ export async function processSrcSet(
     })
   )
 
-  const url = ret.reduce((prev, { url, descriptor }, index) => {
+  return ret.reduce((prev, { url, descriptor }, index) => {
     descriptor = descriptor || ''
     return (prev +=
       url + ` ${descriptor}${index === ret.length - 1 ? '' : ', '}`)
   }, '')
-
-  return url
 }
 
 // based on https://github.com/sveltejs/svelte/blob/abf11bb02b2afbd3e4cac509a0f70e318c306364/src/compiler/utils/mapped_code.ts#L221
@@ -551,5 +612,23 @@ export function arraify<T>(target: T | T[]): T[] {
   return Array.isArray(target) ? target : [target]
 }
 
+export function toUpperCaseDriveLetter(pathName: string): string {
+  return pathName.replace(/^\w:/, (letter) => letter.toUpperCase())
+}
+
 export const multilineCommentsRE = /\/\*(.|[\r\n])*?\*\//gm
 export const singlelineCommentsRE = /\/\/.*/g
+
+export const usingDynamicImport = typeof jest === 'undefined'
+/**
+ * Dynamically import files. It will make sure it's not being compiled away by TS/Rollup.
+ *
+ * As a temporary workaround for Jest's lack of stable ESM support, we fallback to require
+ * if we're in a Jest environment.
+ * See https://github.com/vitejs/vite/pull/5197#issuecomment-938054077
+ *
+ * @param file File path to import.
+ */
+export const dynamicImport = usingDynamicImport
+  ? new Function('file', 'return import(file)')
+  : require

@@ -89,6 +89,7 @@ const cssModuleRE = new RegExp(`\\.module${cssLangs}`)
 const directRequestRE = /(\?|&)direct\b/
 const commonjsProxyRE = /\?commonjs-proxy/
 const inlineRE = /(\?|&)inline\b/
+const usedRE = /(\?|&)used\b/
 
 const enum PreprocessLang {
   less = 'less',
@@ -206,7 +207,7 @@ export function cssPlugin(config: ResolvedConfig): Plugin {
         const thisModule = moduleGraph.getModuleById(id)
         if (thisModule) {
           // CSS modules cannot self-accept since it exports values
-          const isSelfAccepting = !modules
+          const isSelfAccepting = !modules && !inlineRE.test(id)
           if (deps) {
             // record deps in the module graph so edits to @import css can trigger
             // main import to hot update
@@ -218,7 +219,10 @@ export function cssPlugin(config: ResolvedConfig): Plugin {
                   : await moduleGraph.ensureEntryFromUrl(
                       (
                         await fileToUrl(file, config, this)
-                      ).replace(config.base, '/')
+                      ).replace(
+                        (config.server?.origin ?? '') + config.base,
+                        '/'
+                      )
                     )
               )
             }
@@ -271,7 +275,7 @@ export function cssPostPlugin(config: ResolvedConfig): Plugin {
       hasEmitted = false
     },
 
-    async transform(css, id, ssr) {
+    async transform(css, id, options) {
       if (!isCSSRequest(id) || commonjsProxyRE.test(id)) {
         return
       }
@@ -286,7 +290,7 @@ export function cssPostPlugin(config: ResolvedConfig): Plugin {
           return css
         } else {
           // server only
-          if (ssr) {
+          if (options?.ssr) {
             return modulesCode || `export default ${JSON.stringify(css)}`
           }
           if (inlined) {
@@ -311,12 +315,16 @@ export function cssPostPlugin(config: ResolvedConfig): Plugin {
       // record css
       if (!inlined) {
         styles.set(id, css)
-      } else {
-        css = await minifyCSS(css, config)
       }
 
       return {
-        code: modulesCode || `export default ${JSON.stringify(css)}`,
+        code:
+          modulesCode ||
+          (usedRE.test(id)
+            ? `export default ${JSON.stringify(
+                inlined ? await minifyCSS(css, config) : css
+              )}`
+            : `export default ''`),
         map: { mappings: '' },
         // avoid the css module from being tree-shaken so that we can retrieve
         // it in renderChunk()
@@ -903,7 +911,7 @@ async function minifyCSS(css: string, config: ResolvedConfig) {
   const { code, warnings } = await transform(css, {
     loader: 'css',
     minify: true,
-    target: config.build.target || undefined
+    target: config.build.cssTarget || undefined
   })
   if (warnings.length) {
     const msgs = await formatMessages(warnings, { kind: 'warning' })
@@ -991,13 +999,21 @@ function loadPreprocessor(lang: PreprocessLang, root: string): any {
   try {
     // Search for the preprocessor in the root directory first, and fall back
     // to the default require paths.
-    const fallbackPaths = require.resolve.paths(lang) || []
+    const fallbackPaths = require.resolve.paths?.(lang) || []
     const resolved = require.resolve(lang, { paths: [root, ...fallbackPaths] })
     return (loadedPreprocessors[lang] = require(resolved))
   } catch (e) {
-    throw new Error(
-      `Preprocessor dependency "${lang}" not found. Did you install it?`
-    )
+    if (e.code === 'MODULE_NOT_FOUND') {
+      throw new Error(
+        `Preprocessor dependency "${lang}" not found. Did you install it?`
+      )
+    } else {
+      const message = new Error(
+        `Preprocessor dependency "${lang}" failed to load:\n${e.message}`
+      )
+      message.stack = e.stack + '\n' + message.stack
+      throw message
+    }
   }
 }
 
@@ -1020,9 +1036,9 @@ const scss: SassStylePreprocessor = async (
       if (resolved) {
         // BROWSER VITE patch: fix https://github.com/vitejs/vite/issues/5337
         const file = path.resolve(resolved);
-        done({file, contents: fs.readFileSync(file, 'utf-8')})
+        done?.({file, contents: fs.readFileSync(file, 'utf-8')})
       } else {
-        done(null)
+        done?.(null)
       }
     })
   }

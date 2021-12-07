@@ -1,7 +1,7 @@
 <template>
   <div class="comments"><!--hello--></div>
   <h1>Vue SFCs</h1>
-  <pre>{{ time }}</pre>
+  <pre>{{ time as string }}</pre>
   <div class="hmr-block">
     <Hmr />
   </div>
@@ -19,6 +19,7 @@
     <AsyncComponent />
   </Suspense>
   <RefTransform />
+  <SetupImportTemplate />
 </template>
 
 <script setup lang="ts">
@@ -33,6 +34,7 @@ import Slotted from './Slotted.vue'
 import ScanDep from './ScanDep.vue'
 import AsyncComponent from './AsyncComponent.vue'
 import RefTransform from './RefTransform.vue'
+import SetupImportTemplate from './setup-import-template/SetupImportTemplate.vue'
 
 import { ref } from 'vue'
 
