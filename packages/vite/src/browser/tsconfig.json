@@ -4,8 +4,8 @@
   "compilerOptions": {
     "outDir": "../../dist/browser",
     "module": "esnext",
-    "types": [],
     "lib": ["ESNext", "DOM"],
-    "sourceMap": true
+    "sourceMap": true,
+    "noUnusedLocals": false,
   }
 }
