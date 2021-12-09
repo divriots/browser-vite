@@ -503,7 +503,6 @@ function viteForBrowserPlugin() {
             'false'
           )
           .replace(/require\('pnpapi'\)/g, 'undefined')
-          .replace(/options\.ssr/g, 'false')
       }
     }
   }
