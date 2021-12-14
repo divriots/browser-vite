@@ -121,10 +121,10 @@ async function instantiateModule(
   const pendingDeps: string[] = []
 
   const ssrImport = async (dep: string) => {
+    dep = unwrapId(dep)
     if (dep[0] !== '.' && dep[0] !== '/') {
       return proxyESM(await nodeImport(dep))
     }
-    dep = unwrapId(dep)
     if (!isCircular(dep) && !pendingImports.get(dep)?.some(isCircular)) {
       pendingDeps.push(dep)
       if (pendingDeps.length === 1) {
