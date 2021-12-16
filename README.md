@@ -110,6 +110,20 @@ pnpapi: EMPTY,
 The vite worker will load `browser-vite` and instanciate a custom `ViteDevServer`:
 
 ```js
+import {
+  transformWithEsbuild,
+  ModuleGraph,
+  transformRequest,
+  createPluginContainer,
+  createDevHtmlTransformFn,
+  resolveConfig,
+  generateCodeFrame,
+  ssrTransform,
+  ssrLoadModule,
+  ViteDevServer,
+  PluginOption
+} from 'vite';
+
 export async function createServer(
   const config = await resolveConfig(
     {
@@ -192,8 +206,11 @@ export async function createServer(
   
   return server;
 }
+```
 
-// ....
+If you want to optimize (bundle) the npm deps, you can do so:
+
+```js
 import {
   scanImports,
   flattenId,
@@ -254,13 +271,14 @@ async function optimizeDeps(
   // Optimize dependency set using a bundler service, e.g. esm.sh
   return data;
 }
+```
 
-/// Vite client plugin
+Vite client plugin (while env works as is, you probably need a different bundle for the client, so that you can inject HMR messages).
 
-import { CLIENT_ENTRY, CLIENT_DIR, ENV_ENTRY } from 'vite/dist/browser';
+```js
+import { CLIENT_ENTRY, CLIENT_DIR, ENV_ENTRY, Plugin } from 'vite';
 import vite_client from 'vite/dist/client/browser.mjs?raw';
 import vite_client_env from 'vite/dist/client/env.mjs?raw';
-import type { Plugin } from 'vite';
 
 const viteClientPlugin: Plugin = {
   name: 'vite:browser:hmr',
