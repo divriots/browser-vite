@@ -221,9 +221,6 @@ export async function runOptimize(server: ViteDevServer) {
     server._optimizeDepsMetadata = await optimizeDeps(
       server,
       optimizeConfig,
-      ref,
-      tree,
-      treeMeta
     );
   } finally {
     server._isRunningOptimizer = false;
