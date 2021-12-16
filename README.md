@@ -41,6 +41,257 @@ Here are the changes made, required to run it in the Browser:
 Another change was made to support running the dependency optimizer as a service:
 - Parse CJS exports (using cjs-module-lexer) to avoid the es-interop transform (further de-coupling vite & optimizer): [#8e80d8](https://github.com/divriots/vite/commit/8e80d88372b4ea287b502ceec7edf52a4c3026b3)
 
+# Usage
+
+A full sample is left as an exercise to the reader, but here are the bits you'll need:
+
+## Installation
+
+Prefer installing as vite alias, so that official vite plugins will work OOB.
+When importing `vite` below, all imports will be resolved in `browser-vite`.
+
+```
+$ npm install --save vite@npm:browser-vite
+```
+
+Package has 2 entry points:
+- `vite/node/node`: regular vite node bundle
+- `vite/node/browser`: browser build -> make sure to use this one, either explicitely or having your bundle use the package.json `browser` field
+
+## Service worker
+
+You'll need a service worker which will intercept all requests from your vite iframe, so that they get served by vite.
+e.g. with workbox:
+
+```js
+workbox.routing.registerRoute(
+  /^https?:\/\/HOST/BASE_URL\/(\/.*)$/,
+  async ({
+    request,
+    params,
+    url,
+  }: import('workbox-routing/types/RouteHandler').RouteHandlerCallbackContext): Promise<Response> => {
+    const req = request?.url || url.toString();
+    const [pathname] = params as string[];
+    // send the request to vite worker
+    const response = await postToViteWorker(pathname)
+    return response;
+  }
+);
+```
+
+## Vite worker
+
+Note: You need to alias `fs` builtin to a VFS implementation (e.g. `memfs`), you may also need other node builtins browserified, for reference we've been running these aliases:
+
+```
+fs: memfs,
+path: path-browserify,
+querystring: querystring-es3,
+url: url/url.js,
+crypto: crypto-browserify,
+stream: readable-stream-no-circular,
+readable-stream: readable-stream-no-circular,
+safe-buffer: buffer,
+timers: timers-browserify,
+os: os-browserify,
+tty: tty-browserify,
+readline: EMPTY,
+fsevents: EMPTY,
+chokidar: EMPTY,
+readdirp: EMPTY,
+consolidate: EMPTY,
+pnpapi: EMPTY,
+// esm-browser version fails to parse HTML in worker, due to DOM (document) reference
+// AFAICT node version works in web worker
+@vue/compiler-dom: @vue/compiler-dom/dist/compiler-dom.cjs.js
+```
+
+The vite worker will load `browser-vite` and instanciate a custom `ViteDevServer`:
+
+```js
+export async function createServer(
+  const config = await resolveConfig(
+    {
+      plugins: [
+        // virtual plugin to provide vite client/env special entries (see below)
+        viteClientPlugin,
+        // virtual plugin to resolve NPM dependencies, e.g. using unpkg, skypack or another provider (browser-vite only handles project files)
+        nodeResolvePlugin,
+        // add vite plugins you need here (e.g. vue, react, astro ...)
+      ]
+      base: BASE_URL, // as hooked in service worker
+      // not really used, but needs to be defined to enable dep optimizations
+      cacheDir: 'browser',
+      root: VFS_ROOT,
+      // any other configuration (e.g. resolve alias)
+    },
+    'serve'
+  );
+  const plugins = config.plugins;
+  const pluginContainer = await createPluginContainer(config);
+  const moduleGraph = new ModuleGraph((url) => pluginContainer.resolveId(url));
+
+  const watcher: any = {
+    on(what: string, cb: any) {
+      return watcher;
+    },
+    add() {},
+  };
+  const server: ViteDevServer = {
+    config,
+    pluginContainer,
+    moduleGraph,
+    transformWithEsbuild,
+    transformRequest(url, options) {
+      return transformRequest(url, server, options);
+    },
+    ssrTransform,
+    printUrls() {},
+    _globImporters: {},
+    ws: {
+      send(data) {
+        // send HMR data to vite client in iframe however you want (post/broadcast-channel ...)
+      },
+      async close() {},
+      on() {},
+      off() {},
+    },
+    watcher,
+    async ssrLoadModule(url) {
+      return ssrLoadModule(url, server, loadModule);
+    },
+    ssrFixStacktrace() {},
+    async close() {},
+    async restart() {},
+    _optimizeDepsMetadata: null,
+    _isRunningOptimizer: false,
+    _ssrExternals: [],
+    _restartPromise: null,
+    _forceOptimizeOnRestart: false,
+    _pendingRequests: new Map(),
+  };
+
+  server.transformIndexHtml = createDevHtmlTransformFn(server);
+
+  // apply server configuration hooks from plugins
+  const postHooks: ((() => void) | void)[] = [];
+  for (const plugin of plugins) {
+    if (plugin.configureServer) {
+      postHooks.push(await plugin.configureServer(server));
+    }
+  }
+
+  // run post config hooks
+  // This is applied before the html middleware so that user middleware can
+  // serve custom content instead of index.html.
+  postHooks.forEach((fn) => fn && fn());
+
+  await pluginContainer.buildStart({});
+  await runOptimize(server);
+  
+  return server;
+}
+
+// ....
+import {
+  scanImports,
+  flattenId,
+  createMissingImporterRegisterFn,
+  ResolvedConfig,
+  DepOptimizationMetadata,
+  ViteDevServer,
+} from 'vite';
+
+export async function runOptimize(server: ViteDevServer) {
+  const optimizeConfig = {
+    ...server.config,
+    build: {
+      ...server.config.build,
+      rollupOptions: {
+        ...server.config.build.rollupOptions,
+        input: ENTRY_FILES,
+      },
+    },
+  };
+
+  try {
+    server._isRunningOptimizer = true;
+    server._optimizeDepsMetadata = null;
+    server._optimizeDepsMetadata = await optimizeDeps(
+      server,
+      optimizeConfig,
+      ref,
+      tree,
+      treeMeta
+    );
+  } finally {
+    server._isRunningOptimizer = false;
+  }
+  server._registerMissingImport = createMissingImporterRegisterFn(
+    server,
+    (_config, _force, _asCommand, newDeps) =>
+      optimizeDeps(server, optimizeConfig, newDeps)
+  );
+}
+
+async function optimizeDeps(
+  server: ViteDevServer,
+  config: ResolvedConfig,
+  deps?: Record<string, string>
+): Promise<DepOptimizationMetadata> {
+  const mainHash = '0';
+  const data: StudioDepOptimizationMetadata = {
+    hash: mainHash,
+    browserHash: mainHash,
+    optimized: {},
+  };
+
+  if (deps) {
+    console.log('New dependencies: ', Object.keys(deps));
+  } else {
+    const { missing } = await scanImports(config);
+    deps = missing;
+    console.log('Scanned dependencies: ', Object.keys(deps));
+  }
+  // Optimize dependency set using a bundler service, e.g. esm.sh
+  return data;
+}
+
+/// Vite client plugin
+
+import { CLIENT_ENTRY, CLIENT_DIR, ENV_ENTRY } from 'vite/dist/browser';
+import vite_client from 'vite/dist/client/browser.mjs?raw';
+import vite_client_env from 'vite/dist/client/env.mjs?raw';
+import type { Plugin } from 'vite';
+
+const viteClientPlugin: Plugin = {
+  name: 'vite:browser:hmr',
+  enforce: 'pre',
+  resolveId(id) {
+    if (id.startsWith(CLIENT_DIR)) {
+      return {
+        id: /\.mjs$/.test(id) ? id : `${id}.mjs`,
+        external: true,
+      };
+    }
+  },
+  load(id) {
+    if (id === CLIENT_ENTRY) {
+      return vite_client;
+    }
+    if (id === ENV_ENTRY) {
+      return vite_client_env;
+    }
+  },
+};
+
+export { viteClientPlugin };
+
+
+```
+
+
 ---
 
 **That's all folks ! Below is upstream README !**
