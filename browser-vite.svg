@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" data-name="Layer 1" viewBox="0 0 404 403">
+  <defs>
+    <linearGradient id="a" x1="134.8" x2="282.3" y1="315.6" y2="115.3" gradientTransform="matrix(1 0 0 -1 0 404)" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#41d1ff"/>
+      <stop offset="1" stop-color="#bd34fe"/>
+    </linearGradient>
+    <linearGradient id="b" x1="204.4" x2="231.1" y1="285.2" y2="102.2" gradientTransform="matrix(1 0 0 -1 0 404)" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffea83"/>
+      <stop offset=".1" stop-color="#ffdd35"/>
+      <stop offset="1" stop-color="#ffa800"/>
+    </linearGradient>
+  </defs>
+  <rect width="403.2" height="403.2" fill="#1a1a1a" rx="22.5"/>
+  <path fill="url(#a)" d="M323 153 205 365a6 6 0 0 1-11 0L73 153a6 6 0 0 1 6-9l119 21a7 7 0 0 0 2 0l117-21a6 6 0 0 1 6 9Z" transform="translate(1)"/>
+  <path fill="url(#b)" d="m255 116-88 17a3 3 0 0 0-3 3l-5 91a3 3 0 0 0 4 4l24-6a3 3 0 0 1 4 4l-7 35a3 3 0 0 0 4 4l15-5a3 3 0 0 1 4 4l-11 56a3 3 0 0 0 5 2l2-2 71-142a3 3 0 0 0-3-5l-25 5a3 3 0 0 1-4-4l16-57a3 3 0 0 0-3-4Z" transform="translate(1)"/>
+  <path fill="#292929" d="M22 0h359a22 22 0 0 1 22 22v77H0V22A22 22 0 0 1 22 0Z"/>
+  <circle cx="43.7" cy="51.9" r="17.2" fill="#ff605a"/>
+  <circle cx="88.4" cy="51.9" r="17.2" fill="#ffec59"/>
+  <circle cx="133.1" cy="51.9" r="17.2" fill="#61ff83"/>
+  <path fill="#fff" d="M346 51h15V35h3v16h15v2h-15v16h-3V53h-15Z"/>
+</svg>
