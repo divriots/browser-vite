@@ -1,25 +1,34 @@
 <p align="center">
-  <a href="https://vitejs.dev" target="_blank" rel="noopener noreferrer">
-    <img width="180" src="https://vitejs.dev/logo.svg" alt="Vite logo">
-  </a>
+<svg xmlns="http://www.w3.org/2000/svg" data-name="Layer 1" viewBox="0 0 404 403">
+  <defs>
+    <linearGradient id="a" x1="134.8" x2="282.3" y1="315.6" y2="115.3" gradientTransform="matrix(1 0 0 -1 0 404)" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#41d1ff"/>
+      <stop offset="1" stop-color="#bd34fe"/>
+    </linearGradient>
+    <linearGradient id="b" x1="204.4" x2="231.1" y1="285.2" y2="102.2" gradientTransform="matrix(1 0 0 -1 0 404)" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffea83"/>
+      <stop offset=".1" stop-color="#ffdd35"/>
+      <stop offset="1" stop-color="#ffa800"/>
+    </linearGradient>
+  </defs>
+  <rect width="403.2" height="403.2" fill="#1a1a1a" rx="22.5"/>
+  <path fill="url(#a)" d="M323 153 205 365a6 6 0 0 1-11 0L73 153a6 6 0 0 1 6-9l119 21a7 7 0 0 0 2 0l117-21a6 6 0 0 1 6 9Z" transform="translate(1)"/>
+  <path fill="url(#b)" d="m255 116-88 17a3 3 0 0 0-3 3l-5 91a3 3 0 0 0 4 4l24-6a3 3 0 0 1 4 4l-7 35a3 3 0 0 0 4 4l15-5a3 3 0 0 1 4 4l-11 56a3 3 0 0 0 5 2l2-2 71-142a3 3 0 0 0-3-5l-25 5a3 3 0 0 1-4-4l16-57a3 3 0 0 0-3-4Z" transform="translate(1)"/>
+  <path fill="#292929" d="M22 0h359a22 22 0 0 1 22 22v77H0V22A22 22 0 0 1 22 0Z"/>
+  <circle cx="43.7" cy="51.9" r="17.2" fill="#ff605a"/>
+  <circle cx="88.4" cy="51.9" r="17.2" fill="#ffec59"/>
+  <circle cx="133.1" cy="51.9" r="17.2" fill="#61ff83"/>
+  <path fill="#fff" d="M346 51h15V35h3v16h15v2h-15v16h-3V53h-15Z"/>
+</svg>
 </p>
 <br/>
 <p align="center">
   <a href="https://npmjs.com/package/browser-vite"><img src="https://img.shields.io/npm/v/browser-vite.svg" alt="npm package"></a>
   <a href="https://nodejs.org/en/about/releases/"><img src="https://img.shields.io/node/v/browser-vite.svg" alt="node compatibility"></a>
+  <br/>
+  by <a href="https://divRIOTS.com">‹div›RIOTS</a>
 </p>
 <br/>
-
-# ‹div›RIOTS Tools
-
-<p align="center">
-  <a href="https://backlight.dev"><img src="https://img.shields.io/badge/Backlight.dev-Design%20System%20Editor-%23f8c307" alt="backlight.dev"></a>
-  <a href="https://webcomponents.dev"><img src="https://img.shields.io/badge/WebComponents.dev-Web%20Components%20Studio-%23459BCF" alt="webcomponents.dev"></a>
-  <a href="https://components.studio"><img src="https://img.shields.io/badge/Components.studio-Components%20Studio-%23319795" alt="components.studio"></a>
-</p>
-
-
-[‹div›RIOTS](https://divriots.com) are makers of online studios dedicated to Design Systems and Components. We use the *Vite* project in the rendering process of the built-in preview in the editor itself.
 
 # Vite for Browser ⚡
 
