@@ -62,7 +62,10 @@ export class ModuleGraph {
   safeModulesPath = new Set<string>()
 
   constructor(
-    private resolveId: (url: string) => Promise<PartialResolvedId | null>
+    private resolveId: (
+      url: string,
+      ssr: boolean
+    ) => Promise<PartialResolvedId | null>
   ) {}
 
   async getModuleByUrl(
@@ -203,7 +206,7 @@ export class ModuleGraph {
   // the same module
   async resolveUrl(url: string, ssr: boolean): Promise<ResolvedUrl> {
     url = removeImportQuery(removeTimestampQuery(url))
-    const resolved = await this.resolveId(url)
+    const resolved = await this.resolveId(url, ssr)
     const resolvedId = resolved?.id || url
     const ext = extname(cleanUrl(resolvedId))
     const { pathname, search, hash } = parseUrl(url)
