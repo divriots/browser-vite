@@ -161,10 +161,11 @@ export function cssPlugin(config: ResolvedConfig): Plugin {
       removedPureCssFilesCache.set(config, new Map<string, RenderedChunk>())
     },
 
-    async transform(raw, id) {
+    async transform(raw, id, options) {
       if (!isCSSRequest(id) || commonjsProxyRE.test(id)) {
         return
       }
+      const ssr = options?.ssr === true
 
       const urlReplacer: CssUrlReplacer = async (url, importer) => {
         if (checkPublicFile(url, config)) {
@@ -222,7 +223,8 @@ export function cssPlugin(config: ResolvedConfig): Plugin {
                       ).replace(
                         (config.server?.origin ?? '') + config.base,
                         '/'
-                      )
+                      ),
+                      ssr
                     )
               )
             }
@@ -232,7 +234,8 @@ export function cssPlugin(config: ResolvedConfig): Plugin {
               // The root CSS proxy module is self-accepting and should not
               // have an explicit accept list
               new Set(),
-              isSelfAccepting
+              isSelfAccepting,
+              ssr
             )
             for (const file of deps) {
               this.addWatchFile(file)
@@ -1035,8 +1038,8 @@ const scss: SassStylePreprocessor = async (
     resolvers.sass(url, importer).then((resolved) => {
       if (resolved) {
         // BROWSER VITE patch: fix https://github.com/vitejs/vite/issues/5337
-        const file = path.resolve(resolved);
-        done?.({file, contents: fs.readFileSync(file, 'utf-8')})
+        const file = path.resolve(resolved)
+        done?.({ file, contents: fs.readFileSync(file, 'utf-8') })
       } else {
         done?.(null)
       }
