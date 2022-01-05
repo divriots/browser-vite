@@ -14,6 +14,10 @@
 
 This is a fork of vite which aims at being used in a browser (served by service worker).
 
+See [introduction blog post](https://divriots.com/blog/vite-in-the-browser).
+
+---
+
 Here are the changes made, required to run it in the Browser:
 - Generate an un-bundled `browser` build: [rollup.config.js#L218-L274](https://github.com/divriots/vite/blob/browser-vite/packages/vite/rollup.config.js#L218-L274)
   - avoids duplicate dependencies in App using it
