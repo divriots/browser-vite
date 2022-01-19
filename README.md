@@ -14,7 +14,9 @@
 
 This is a fork of vite which aims at being used in a browser (served by service worker).
 
-See [introduction blog post](https://divriots.com/blog/vite-in-the-browser).
+- [Introduction blog post](https://divriots.com/blog/vite-in-the-browser)
+
+Used in [Backlight.dev](https://backlight.dev) and in the upcoming [Replic.dev](https://replic.dev)
 
 ---
 
