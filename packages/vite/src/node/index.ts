@@ -10,7 +10,16 @@ export { createLogger, printHttpServerUrls } from './logger'
 export { transformWithEsbuild } from './plugins/esbuild'
 export { resolvePackageEntry } from './plugins/resolve'
 export { resolvePackageData } from './packages'
-export { normalizePath, flattenId } from './utils'
+export {
+  normalizePath,
+  flattenId,
+  injectQuery,
+  removeImportQuery,
+  unwrapId,
+  generateCodeFrame,
+  posToNumber
+} from './utils'
+export { createDevHtmlTransformFn } from './server/middlewares/indexHtml'
 
 // additional types
 export type { CorsOptions, CorsOrigin, CommonServerOptions } from './http'
@@ -92,3 +101,13 @@ export type { Terser } from 'types/terser'
 export type { RollupCommonJSOptions } from 'types/commonjs'
 export type { RollupDynamicImportVarsOptions } from 'types/dynamicImportVars'
 export type { Matcher, AnymatchPattern, AnymatchFn } from 'types/anymatch'
+
+export {
+  normalizePath,
+  flattenId,
+  injectQuery,
+  removeImportQuery,
+  unwrapId,
+  generateCodeFrame,
+  posToNumber
+} from '../node/utils'
