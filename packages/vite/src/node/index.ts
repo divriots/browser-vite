@@ -101,13 +101,3 @@ export type { Terser } from 'types/terser'
 export type { RollupCommonJSOptions } from 'types/commonjs'
 export type { RollupDynamicImportVarsOptions } from 'types/dynamicImportVars'
 export type { Matcher, AnymatchPattern, AnymatchFn } from 'types/anymatch'
-
-export {
-  normalizePath,
-  flattenId,
-  injectQuery,
-  removeImportQuery,
-  unwrapId,
-  generateCodeFrame,
-  posToNumber
-} from '../node/utils'
