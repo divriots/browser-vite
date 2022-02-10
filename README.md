@@ -6,7 +6,15 @@
   <a href="https://npmjs.com/package/browser-vite"><img src="https://img.shields.io/npm/v/browser-vite.svg" alt="npm package"></a>
   <a href="https://nodejs.org/en/about/releases/"><img src="https://img.shields.io/node/v/browser-vite.svg" alt="node compatibility"></a>
   <br/>
-  by <a href="https://divRIOTS.com">‹div›RIOTS</a>
+</p>
+<p align="center">
+  <a href="https://divRIOTS.com">Brought to you by<br/></a>
+  <a href="https://divRIOTS.com#gh-light-mode-only" target="_blank">
+        <img width="150" height="40" src="https://divRIOTS.com/divriots.svg#gh-light-mode-only" alt="‹div›RIOTS" />
+        </a>
+        <a href="https://divRIOTS.com#gh-dark-mode-only" target="_blank">
+        <img width="150" height="40" src="https://divRIOTS.com/divriots-dark.svg#gh-dark-mode-only" alt="‹div›RIOTS" />
+        </a>
 </p>
 <br/>
 
