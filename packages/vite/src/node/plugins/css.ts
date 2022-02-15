@@ -1027,14 +1027,14 @@ const scss: SassStylePreprocessor = async (
   options,
   resolvers
 ) => {
+  // BROWSER VITE patch: when running in-browser, sass will provide importer as location.origin based url
+  const toLocal = (url: string) =>
+    isExternalUrl(url) ? new URL(url).pathname : url
+
   // BROWSER VITE patch: dynamic sass import
   const render = (await import('sass')).render
   const internalImporter: Sass.Importer = (url, importer, done) => {
-    // BROWSER VITE patch: when running in-browser, sass will provide importer as location.origin based url
-    if (isExternalUrl(importer)) {
-      const url = new URL(importer)
-      importer = url.pathname
-    }
+    importer = toLocal(importer)
     resolvers.sass(url, importer).then((resolved) => {
       if (resolved) {
         // BROWSER VITE patch: fix https://github.com/vitejs/vite/issues/5337
@@ -1070,7 +1070,7 @@ const scss: SassStylePreprocessor = async (
         }
       })
     })
-    const deps = result.stats.includedFiles
+    const deps = result.stats.includedFiles?.map((file) => toLocal(file))
 
     return {
       code: result.css.toString(),
