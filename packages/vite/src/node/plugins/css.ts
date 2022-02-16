@@ -1032,7 +1032,7 @@ const scss: SassStylePreprocessor = async (
     isExternalUrl(url) ? new URL(url).pathname : url
 
   // BROWSER VITE patch: dynamic sass import
-  const render = (await import('sass')).render
+  const render = (await import('sass').then((m:any)=>m.default||m)).render
   const internalImporter: Sass.Importer = (url, importer, done) => {
     importer = toLocal(importer)
     resolvers.sass(url, importer).then((resolved) => {
