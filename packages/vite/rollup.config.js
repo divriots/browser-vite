@@ -470,7 +470,6 @@ function viteForBrowserPlugin() {
   const aliases = {
     chalk: `const p = new Proxy(s=>s, { get() {return p;}});export default p;`,
     debug: `export default function debug() {return () => {}}`,
-    'fast-glob': 'export default { sync: () => [] }',
     'postcss-load-config':
       'export default () => {throw new Error("No PostCSS Config found")}',
     sirv: 'export default function () {}'
