@@ -663,8 +663,15 @@ async function compileCSS(
     postcssConfig && postcssConfig.plugins ? postcssConfig.plugins.slice() : []
 
   if (needInlineImport) {
+    const isExternal = getIdMatcher(config.build.rollupOptions?.external || false)    
     postcssPlugins.unshift(
       (await import('postcss-import')).default({
+        filter(id) {
+          if (config.command === 'build') {
+            return !isExternal(id, config.root, false);
+          }
+          return true;
+        },
         async resolve(id, basedir) {
           const resolved = await atImportResolvers.css(
             id,
@@ -1296,4 +1303,46 @@ const preProcessors = Object.freeze({
 
 function isPreProcessor(lang: any): lang is PreprocessLang {
   return lang && lang in preProcessors
+}
+
+const getIdMatcher = <T extends Array<any>>(
+	option:
+		| undefined
+		| boolean
+		| string
+		| RegExp
+		| (string | RegExp)[]
+		| ((id: string, ...args: T) => boolean | null | undefined)
+): ((id: string, ...args: T) => boolean) => {
+	if (option === true) {
+		return () => true;
+	}
+	if (typeof option === 'function') {
+		return (id, ...args) => (!id.startsWith('\0') && option(id, ...args)) || false;
+	}
+	if (option) {
+		const ids = new Set<string>();
+		const matchers: RegExp[] = [];
+		for (const value of ensureArray(option)) {
+			if (value instanceof RegExp) {
+				matchers.push(value);
+			} else {
+				ids.add(value);
+			}
+		}
+		return (id: string, ..._args) => ids.has(id) || matchers.some(matcher => matcher.test(id));
+	}
+	return () => false;
+};
+
+function ensureArray<T>(
+	items: (T | false | null | undefined)[] | T | false | null | undefined
+): T[] {
+	if (Array.isArray(items)) {
+		return items.filter(Boolean) as T[];
+	}
+	if (items) {
+		return [items];
+	}
+	return [];
 }

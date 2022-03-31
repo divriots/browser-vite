@@ -52,6 +52,7 @@ declare module 'postcss-load-config' {
 declare module 'postcss-import' {
   import { Plugin } from 'postcss'
   const plugin: (options: {
+    filter: (id: string) => boolean,
     resolve: (
       id: string,
       basedir: string,
