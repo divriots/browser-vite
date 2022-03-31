@@ -9,7 +9,8 @@ import {
   isDataUrl,
   isTsRequest,
   isPossibleTsOutput,
-  getTsSrcPath
+  getTsSrcPath,
+  isFileReadable
 } from '../../node/utils'
 import type { ViteDevServer, InternalResolveOptions } from '../../node'
 import type { PartialResolvedId } from 'rollup'
@@ -231,11 +232,13 @@ function tryResolveFile(
   skipPackageJson?: boolean
 ): string | undefined {
   if (!file.startsWith(options.root)) return undefined
-  if (fs.existsSync(file)) {
-    return file + postfix
-  } else if (tryIndex) {
-    const index = tryFsResolve(file + '/index', options, false)
-    if (index) return index + postfix
+  if (isFileReadable(file)) {
+    if (!fs.statSync(file).isDirectory()) {
+      return file + postfix
+    } else if (tryIndex) {
+      const index = tryFsResolve(file + '/index', options, false)
+      if (index) return index + postfix
+    }
   }
 
   const tryTsExtension = options.isFromTsImporter && isPossibleTsOutput(file)
